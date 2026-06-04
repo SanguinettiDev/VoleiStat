@@ -137,7 +137,21 @@ export const usePartidaStore = create<PartidaState>((set, get) => ({
     timeAdversarioEmQuadra: { ...state.timeAdversarioEmQuadra, [zona]: camisa }
   })),
 
-  definirSacador: (lado) => set({ sacadorAtual: lado }),
+  definirSacador: (lado) => set((state) => {
+    if (state.partidaEncerrada || state.sacadorAtual === lado) return state;
+
+    const ganhouSaque = state.sacadorAtual !== null;
+
+    return {
+      sacadorAtual: lado,
+      timeEmQuadra: ganhouSaque && lado === 'nos'
+        ? rodarFormacao(state.timeEmQuadra)
+        : state.timeEmQuadra,
+      timeAdversarioEmQuadra: ganhouSaque && lado === 'adversario'
+        ? rodarFormacao(state.timeAdversarioEmQuadra)
+        : state.timeAdversarioEmQuadra
+    };
+  }),
 
   pontuar: (lado) => set((state) => {
     if (state.partidaEncerrada) return state;
