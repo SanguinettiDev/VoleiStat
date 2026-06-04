@@ -55,12 +55,13 @@ interface ZonaQuadraProps {
   clicavel: boolean;
   selecionada: boolean;
   modoDestino: boolean;
+  duplicada: boolean;
   sacando: boolean;
   onChange: (val: string) => void;
   onClick: () => void;
 }
 
-function ZonaQuadra({ zona, lado, faseSetup, camisa, clicavel, selecionada, modoDestino, sacando, onChange, onClick }: ZonaQuadraProps) {
+function ZonaQuadra({ zona, lado, faseSetup, camisa, clicavel, selecionada, modoDestino, duplicada, sacando, onChange, onClick }: ZonaQuadraProps) {
   return (
     <button
       type="button"
@@ -71,6 +72,7 @@ function ZonaQuadra({ zona, lado, faseSetup, camisa, clicavel, selecionada, modo
         lado === 'adversario' ? 'border-red-200/70 bg-red-50 text-slate-950' : 'border-sky-200/80 bg-sky-50 text-slate-950',
         selecionada && 'border-amber-300 ring-4 ring-amber-300/35',
         modoDestino && 'border-emerald-300 ring-4 ring-emerald-300/25',
+        duplicada && 'border-red-500 ring-4 ring-red-300/60',
         sacando && 'ring-4 ring-teal-300/50',
         clicavel || faseSetup ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default opacity-70'
       )}
@@ -81,6 +83,11 @@ function ZonaQuadra({ zona, lado, faseSetup, camisa, clicavel, selecionada, modo
           SAQUE
         </span>
       )}
+      {duplicada && (
+        <span className="mt-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">
+          REPETIDO
+        </span>
+      )}
       {faseSetup ? (
         <input
           type="text"
@@ -89,13 +96,47 @@ function ZonaQuadra({ zona, lado, faseSetup, camisa, clicavel, selecionada, modo
           value={camisa}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => onChange(e.target.value)}
-          className="mt-2 h-9 w-16 rounded-md border-2 border-slate-300 bg-white px-2 text-center text-lg font-black text-slate-950 outline-none focus:border-blue-500"
+          className={cx(
+            'mt-2 h-9 w-16 rounded-md border-2 bg-white px-2 text-center text-lg font-black text-slate-950 outline-none focus:border-blue-500',
+            duplicada ? 'border-red-500' : 'border-slate-300'
+          )}
         />
       ) : (
         <span className="mt-1 text-4xl font-black leading-none">{camisa || '?'}</span>
       )}
     </button>
   );
+}
+
+function normalizarCamisa(camisa: string) {
+  return camisa.trim();
+}
+
+function camisasDuplicadas(time: Record<number, string>) {
+  const contagem = new Map<string, number>();
+
+  Object.values(time).forEach((camisa) => {
+    const numero = normalizarCamisa(camisa);
+    if (!numero) return;
+    contagem.set(numero, (contagem.get(numero) ?? 0) + 1);
+  });
+
+  return new Set(
+    [...contagem.entries()]
+      .filter(([, quantidade]) => quantidade > 1)
+      .map(([camisa]) => camisa)
+  );
+}
+
+function zonasComCamisaDuplicada(time: Record<number, string>) {
+  const duplicadas = camisasDuplicadas(time);
+  const zonas = new Set<number>();
+
+  Object.entries(time).forEach(([zona, camisa]) => {
+    if (duplicadas.has(normalizarCamisa(camisa))) zonas.add(Number(zona));
+  });
+
+  return zonas;
 }
 
 export default function App() {
@@ -172,6 +213,15 @@ export default function App() {
   const piorJogada = linhasAproveitamento.length > 1
     ? linhasAproveitamento[linhasAproveitamento.length - 1]
     : null;
+  const camisasDuplicadasNos = camisasDuplicadas(timeEmQuadra);
+  const camisasDuplicadasAdversario = camisasDuplicadas(timeAdversarioEmQuadra);
+  const zonasDuplicadasNos = zonasComCamisaDuplicada(timeEmQuadra);
+  const zonasDuplicadasAdversario = zonasComCamisaDuplicada(timeAdversarioEmQuadra);
+  const temCamisaDuplicada = camisasDuplicadasNos.size > 0 || camisasDuplicadasAdversario.size > 0;
+  const textoCamisasDuplicadas = [
+    camisasDuplicadasNos.size > 0 ? `Nos: ${[...camisasDuplicadasNos].join(', ')}` : null,
+    camisasDuplicadasAdversario.size > 0 ? `Adv: ${[...camisasDuplicadasAdversario].join(', ')}` : null
+  ].filter(Boolean).join(' | ');
 
   const textoStatusJogada = partidaEncerrada
     ? `Partida encerrada: ${nomeLado[vencedorPartida ?? 'nos']} venceu`
@@ -242,6 +292,15 @@ export default function App() {
     prepararAcao(acao);
   };
 
+  const handleIrParaJogo = () => {
+    if (temCamisaDuplicada) {
+      alert(`Corrija os numeros repetidos antes de iniciar: ${textoCamisasDuplicadas}`);
+      return;
+    }
+
+    setFaseSetup(false);
+  };
+
   const handlePontuar = (lado: LadoPlacar) => {
     limparRascunhoJogada();
     pontuar(lado);
@@ -303,13 +362,23 @@ export default function App() {
                   Dashboard
                 </button>
                 {faseSetup && (
-                  <button type="button" onClick={() => setFaseSetup(false)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-black text-emerald-950 transition hover:bg-emerald-400">
+                  <button type="button" onClick={handleIrParaJogo} className={cx(
+                    'inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-black transition',
+                    temCamisaDuplicada
+                      ? 'bg-red-500 text-white hover:bg-red-400'
+                      : 'bg-emerald-500 text-emerald-950 hover:bg-emerald-400'
+                  )}>
                     <Play className="h-4 w-4" />
                     Ir para o Jogo
                   </button>
                 )}
               </div>
             </div>
+            {faseSetup && temCamisaDuplicada && (
+              <div className="mt-3 rounded-lg border border-red-400/70 bg-red-950/70 px-3 py-2 text-sm font-black text-red-100">
+                Numero repetido no mesmo time: {textoCamisasDuplicadas}
+              </div>
+            )}
           </header>
 
           <section className="rounded-xl border border-slate-200 bg-slate-100 p-4 text-slate-950 shadow-xl">
@@ -443,6 +512,7 @@ export default function App() {
                 clicavel={podeEscolherOrigem || (podeEscolherDestino && destinoEsperado === 'adversario')}
                 selecionada={origemPendente?.lado === 'adversario' && origemPendente.zona === zona}
                 modoDestino={podeEscolherDestino && destinoEsperado === 'adversario'}
+                duplicada={zonasDuplicadasAdversario.has(zona)}
                 sacando={sacadorAtual === 'adversario' && zona === 1}
                 onChange={(val) => definirCamisaAdversaria(zona, val)}
                 onClick={() => handleCliqueQuadra('adversario', zona)}
@@ -463,6 +533,7 @@ export default function App() {
                 clicavel={podeEscolherOrigem || (podeEscolherDestino && destinoEsperado === 'adversario')}
                 selecionada={origemPendente?.lado === 'adversario' && origemPendente.zona === zona}
                 modoDestino={podeEscolherDestino && destinoEsperado === 'adversario'}
+                duplicada={zonasDuplicadasAdversario.has(zona)}
                 sacando={sacadorAtual === 'adversario' && zona === 1}
                 onChange={(val) => definirCamisaAdversaria(zona, val)}
                 onClick={() => handleCliqueQuadra('adversario', zona)}
@@ -485,6 +556,7 @@ export default function App() {
                 clicavel={podeEscolherOrigem || (podeEscolherDestino && destinoEsperado === 'nos')}
                 selecionada={origemPendente?.lado === 'nos' && origemPendente.zona === zona}
                 modoDestino={podeEscolherDestino && destinoEsperado === 'nos'}
+                duplicada={zonasDuplicadasNos.has(zona)}
                 sacando={sacadorAtual === 'nos' && zona === 1}
                 onChange={(val) => definirCamisa(zona, val)}
                 onClick={() => handleCliqueQuadra('nos', zona)}
@@ -505,6 +577,7 @@ export default function App() {
                 clicavel={podeEscolherOrigem || (podeEscolherDestino && destinoEsperado === 'nos')}
                 selecionada={origemPendente?.lado === 'nos' && origemPendente.zona === zona}
                 modoDestino={podeEscolherDestino && destinoEsperado === 'nos'}
+                duplicada={zonasDuplicadasNos.has(zona)}
                 sacando={sacadorAtual === 'nos' && zona === 1}
                 onChange={(val) => definirCamisa(zona, val)}
                 onClick={() => handleCliqueQuadra('nos', zona)}
